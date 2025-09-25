@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -20,15 +21,15 @@ jobs:
       with:
         node-version: '18'
 
-    # 3️⃣ Build Angular
+    # 3️⃣ Build Angular et copier le dist dans backend
     - name: Build Angular
       run: |
         cd ngx-admin
         rm -rf node_modules package-lock.json
         npm install --legacy-peer-deps
+        npm install -g @angular/cli@12
         export NODE_OPTIONS=--openssl-legacy-provider
         ng build --configuration production
-        # Copier le dist dans le backend
         cp -r dist/* ../budget-backend-ahmed/src/main/resources/static/
 
     # 4️⃣ Setup Java 17
@@ -38,7 +39,7 @@ jobs:
         distribution: temurin
         java-version: '17'
 
-    # 5️⃣ Cache Maven
+    # 5️⃣ Cache Maven pour accélérer le build
     - name: Cache Maven packages
       uses: actions/cache@v3
       with:
@@ -48,7 +49,7 @@ jobs:
           ${{ runner.os }}-maven-
 
     # 6️⃣ Build Spring Boot
-    - name: Build with Maven
+    - name: Build Spring Boot
       run: mvn clean package -DskipTests
       working-directory: budget-backend-ahmed
 
@@ -56,7 +57,7 @@ jobs:
     - name: Check JAR file
       run: ls -lh budget-backend-ahmed/target
 
-    # 8️⃣ Deploy to Azure App Service
+    # 8️⃣ Déploiement vers Azure Web App
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
@@ -65,7 +66,7 @@ jobs:
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         package: budget-backend-ahmed/target/*.jar
 
-    # 9️⃣ Configurer les variables d'environnement
+    # 9️⃣ Configurer les variables d'environnement (App Settings)
     - name: Configure App Settings
       uses: azure/CLI@v1
       with:
@@ -76,9 +77,9 @@ jobs:
             --name budget-backend-ahmed \
             --settings \
               SPRING_PROFILES_ACTIVE=prod \
-              SPRING_DATASOURCE_URL="${{ secrets.DB_URL }}" \
-              SPRING_DATASOURCE_USERNAME="${{ secrets.DB_USER }}" \
-              SPRING_DATASOURCE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+              SPRING_DATASOURCE_URL=jdbc:postgresql://budgetdb-srv-ahmed.postgres.database.azure.com:5432/budgetdb?sslmode=require \
+              SPRING_DATASOURCE_USERNAME=Ahmed \
+              SPRING_DATASOURCE_PASSWORD=ChangeMe!234 \
               FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
-              JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              JWT_SECRET=U8K9e2VxL0f6Jq3TbH4YpR7wQ8mN5ZxV1sC6R9bW3tA0dG7H_YQ4J5Z8K1V2L3 \
               JWT_EXPIRATION_MS=86400000
