@@ -1,4 +1,4 @@
-name: Build & Deploy Spring Boot to Azure
+name: Build & Deploy Spring Boot + Angular to Azure
 
 on:
   push:
@@ -10,21 +10,29 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      PROJECT_DIR: budget-backend-ahmed
+      BACKEND_DIR: budget-backend-ahmed
+      FRONTEND_DIR: ngx-admin
+      FRONTEND_DIST: dist
 
     steps:
       # 1) Checkout code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) Setup Java 17
+      # 2) Setup Node.js for Angular
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # 3) Setup Java 17
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3) Cache Maven dependencies
+      # 4) Cache Maven dependencies
       - name: Cache Maven
         uses: actions/cache@v4
         with:
@@ -33,43 +41,40 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      # 4) Build Maven project (skip tests)
-      - name: Build with Maven
+      # 5) Build Angular frontend
+      - name: Build Angular Frontend
         run: |
-          cd $PROJECT_DIR
-          mvn -B clean package -DskipTests
+          cd $FRONTEND_DIR
+          npm install
+          ng build --configuration production
+          cd -
 
-      # 5) Package the jar into a zip for Azure
+      # 6) Copy Angular build into backend static
+      - name: Copy frontend to backend static
+        run: |
+          rm -rf $BACKEND_DIR/src/main/resources/static/*
+          cp -R $FRONTEND_DIR/$FRONTEND_DIST/* $BACKEND_DIR/src/main/resources/static/
+
+      # 7) Build Maven backend (skip tests)
+      - name: Build Backend
+        run: |
+          cd $BACKEND_DIR
+          mvn -B clean package -DskipTests
+          cd -
+
+      # 8) Package backend jar into zip
       - name: Package ZIP
         run: |
-          cd $PROJECT_DIR/target
+          cd $BACKEND_DIR/target
           rm -f app.zip
           zip app.zip *.jar
           ls -l app.zip
           cd -
 
-      # 6) Configure App Settings from GitHub Secrets
-      - name: Configure App Settings
-        uses: azure/CLI@v1
-        with:
-          azcliversion: latest
-          inlineScript: |
-            az webapp config appsettings set \
-              --resource-group budget-rg \
-              --name budget-backend-ahmed \
-              --settings \
-              SPRING_PROFILES_ACTIVE=prod \
-              SPRING_DATASOURCE_URL="${{ secrets.DB_URL }}" \
-              SPRING_DATASOURCE_USERNAME="${{ secrets.DB_USER }}" \
-              SPRING_DATASOURCE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
-              FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
-              JWT_SECRET="${{ secrets.JWT_SECRET }}" \
-              JWT_EXPIRATION_MS=86400000
-
-      # 7) Deploy the zip to Azure Web App
+      # 9) Deploy to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: budget-backend-ahmed
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ${{ env.PROJECT_DIR }}/target/app.zip
+          package: $BACKEND_DIR/target/app.zip
