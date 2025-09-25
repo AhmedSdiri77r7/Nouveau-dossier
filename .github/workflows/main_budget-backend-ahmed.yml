@@ -45,7 +45,7 @@ jobs:
       - name: Build Angular Frontend
         run: |
           cd $FRONTEND_DIR
-          npm install
+          npm ci
           ng build --configuration production
           cd -
 
@@ -55,7 +55,7 @@ jobs:
           rm -rf $BACKEND_DIR/src/main/resources/static/*
           cp -R $FRONTEND_DIR/$FRONTEND_DIST/* $BACKEND_DIR/src/main/resources/static/
 
-      # 7) Build Maven backend (skip tests)
+      # 7) Build backend (Maven)
       - name: Build Backend
         run: |
           cd $BACKEND_DIR
@@ -71,7 +71,26 @@ jobs:
           ls -l app.zip
           cd -
 
-      # 9) Deploy to Azure Web App
+      # 9) Configure App Settings from GitHub Secrets
+      - name: Configure Azure App Settings
+        uses: azure/CLI@v1
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az webapp config appsettings set \
+              --resource-group budget-rg \
+              --name budget-backend-ahmed \
+              --settings \
+              SPRING_PROFILES_ACTIVE=prod \
+              SPRING_DATASOURCE_URL="${{ secrets.DB_URL }}" \
+              SPRING_DATASOURCE_USERNAME="${{ secrets.DB_USER }}" \
+              SPRING_DATASOURCE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+              FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
+              JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              JWT_EXPIRATION_MS=86400000 \
+              JAVA_VERSION=17
+
+      # 10) Deploy the zip to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
