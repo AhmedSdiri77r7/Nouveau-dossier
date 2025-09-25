@@ -1,4 +1,4 @@
-name: Deploy Backend Only to Azure
+name: Deploy Backend to Azure
 
 on:
   push:
@@ -40,7 +40,7 @@ jobs:
     - name: Check JAR file
       run: ls -lh budget-backend-ahmed/target
 
-    # 6️⃣ Login Azure
+    # 6️⃣ Login Azure via Service Principal
     - name: Login to Azure
       uses: azure/login@v1
       with:
@@ -52,11 +52,10 @@ jobs:
       with:
         app-name: budget-backend-ahmed
         slot-name: production
-        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         package: budget-backend-ahmed/target/*.jar
 
     # 8️⃣ Configurer les variables d’environnement dans Azure
-    - name: Configure App Settings (Environment Variables)
+    - name: Configure App Settings
       uses: azure/CLI@v1
       with:
         azcliversion: latest
