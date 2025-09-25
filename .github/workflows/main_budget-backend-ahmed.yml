@@ -1,78 +1,87 @@
-name: Build and Deploy Fullstack App to Azure
+name: Build & Deploy Fullstack App to Azure
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # 1️⃣ Checkout du code
-    - name: Checkout code
-      uses: actions/checkout@v3
+      # 1️⃣ Checkout du code
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    # 2️⃣ Setup Node.js (pour Angular)
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+      # 2️⃣ Setup Node.js pour Angular
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
-    # 3️⃣ Build Angular et copier dans backend
-    - name: Build Angular
-      run: |
-        cd ngx-admin
-        npm install --legacy-peer-deps
-        npm run build --configuration production
-        cp -r dist/* ../budget-backend-ahmed/src/main/resources/static/
+      # 3️⃣ Build Angular
+      - name: Build Angular
+        run: |
+          cd ngx-admin
+          npm ci
+          npm run build --prod
+          # Copier le dist Angular dans le dossier static du backend
+          cp -r dist/* ../budget-backend-ahmed/src/main/resources/static/
+      
+      # 4️⃣ Setup Java 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: '17'
 
-    # 4️⃣ Setup Java 17
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        distribution: temurin
-        java-version: '17'
+      # 5️⃣ Cache Maven
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
-    # 5️⃣ Cache Maven
-    - name: Cache Maven packages
-      uses: actions/cache@v3
-      with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ runner.os }}-maven-
+      # 6️⃣ Build Spring Boot
+      - name: Build Backend with Maven
+        run: mvn clean package -DskipTests
+        working-directory: budget-backend-ahmed
 
-    # 6️⃣ Build Spring Boot
-    - name: Build with Maven
-      run: mvn clean package -DskipTests
-      working-directory: budget-backend-ahmed
+      # 7️⃣ Vérifier le JAR généré
+      - name: List JAR files
+        run: ls -lh budget-backend-ahmed/target
 
-    # 7️⃣ Vérifier quel JAR a été généré
-    - name: Check JAR file
-      run: ls -lh budget-backend-ahmed/target
+      # 8️⃣ Déploiement sur Azure
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: budget-backend-ahmed
+          slot-name: production
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: budget-backend-ahmed/target/*.jar
 
-    # 8️⃣ Deploy to Azure App Service
-    - name: Deploy to Azure Web App
-      uses: azure/webapps-deploy@v2
-      with:
-        app-name: budget-backend-ahmed
-        slot-name: production
-        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        package: budget-backend-ahmed/target/*.jar
-
-    # 9️⃣ Configure environment variables (⚠️ via secrets, pas en clair)
-    - name: Configure App Settings (Environment Variables)
-      uses: azure/CLI@v1
-      with:
-        azcliversion: latest
-        inlineScript: |
-          az webapp config appsettings set --resource-group budget-rg --name budget-backend-ahmed --settings \
-            SPRING_PROFILES_ACTIVE=prod \
-            SPRING_DATASOURCE_URL="${{ secrets.DB_URL }}" \
-            SPRING_DATASOURCE_USERNAME="${{ secrets.DB_USER }}" \
-            SPRING_DATASOURCE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
-            FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
-            JWT_SECRET="${{ secrets.JWT_SECRET }}" \
-            JWT_EXPIRATION_MS=86400000
+      # 9️⃣ Configuration des variables d’environnement sur Azure
+      - name: Configure App Settings
+        uses: azure/CLI@v1
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az webapp config appsettings set \
+              --resource-group budget-rg \
+              --name budget-backend-ahmed \
+              --settings \
+                FILE_UPLOAD_DIR=${{ secrets.FILE_UPLOAD_DIR }} \
+                JAVA_VERSION=${{ secrets.JAVA_VERSION }} \
+                JWT_EXPIRATION_MS=${{ secrets.JWT_EXPIRATION_MS }} \
+                JWT_SECRET=${{ secrets.JWT_SECRET }} \
+                SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }} \
+                SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
+                SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
+                SPRING_JPA_DATABASE_PLATFORM=${{ secrets.SPRING_JPA_DATABASE_PLATFORM }} \
+                SPRING_JPA_HIBERNATE_DDL_AUTO=${{ secrets.SPRING_JPA_HIBERNATE_DDL_AUTO }} \
+                SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }} \
+                WEBSITE_HTTPLOGGING_RETENTION_DAYS=3
