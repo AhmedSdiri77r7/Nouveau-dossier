@@ -1,4 +1,4 @@
-name: Build & Deploy Spring Boot Backend to Azure
+name: Build & Deploy Spring Boot to Azure
 
 on:
   push:
@@ -48,10 +48,30 @@ jobs:
           ls -l app.zip
           cd -
 
-      # 6) Deploy the zip to Azure Web App
+      # 6) Login to Azure
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # 7) Configure App Settings from GitHub Secrets
+      - name: Configure App Settings
+        run: |
+          az webapp config appsettings set \
+            --resource-group budget-rg \
+            --name budget-backend-ahmed \
+            --settings \
+            SPRING_PROFILES_ACTIVE=prod \
+            SPRING_DATASOURCE_URL="${{ secrets.DB_URL }}" \
+            SPRING_DATASOURCE_USERNAME="${{ secrets.DB_USER }}" \
+            SPRING_DATASOURCE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
+            JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+            JWT_EXPIRATION_MS=86400000
+
+      # 8) Deploy the zip to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: budget-backend-ahmed
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ${{ env.PROJECT_DIR }}/target/app.zip
