@@ -1,4 +1,4 @@
-name: Build & Deploy Spring Boot + Angular to Azure
+name: Build & Deploy Backend + Frontend to Azure
 
 on:
   push:
@@ -11,28 +11,21 @@ jobs:
 
     env:
       BACKEND_DIR: budget-backend-ahmed
-      FRONTEND_DIR: ngx-admin
-      FRONTEND_DIST: dist
+      FRONTEND_DIR: budget-frontend   # <-- mets ici le dossier de ton projet Angular
 
     steps:
       # 1) Checkout code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) Setup Node.js for Angular
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      # 3) Setup Java 17
+      # 2) Setup Java 17
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 4) Cache Maven dependencies
+      # 3) Cache Maven dependencies
       - name: Cache Maven
         uses: actions/cache@v4
         with:
@@ -41,29 +34,30 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      # 5) Build Angular frontend
-      - name: Build Angular Frontend
-        run: |
-          cd $FRONTEND_DIR
-          npm ci
-          ng build --configuration production
-          cd -
-
-      # 6) Copy Angular build into backend static
-      - name: Copy frontend to backend static
-        run: |
-          rm -rf $BACKEND_DIR/src/main/resources/static/*
-          cp -R $FRONTEND_DIR/$FRONTEND_DIST/* $BACKEND_DIR/src/main/resources/static/
-
-      # 7) Build backend (Maven)
-      - name: Build Backend
+      # 4) Build Backend
+      - name: Build Backend with Maven
         run: |
           cd $BACKEND_DIR
           mvn -B clean package -DskipTests
           cd -
 
-      # 8) Package backend jar into zip
-      - name: Package ZIP
+      # 5) Build Frontend Angular
+      - name: Build Angular Frontend
+        run: |
+          cd $FRONTEND_DIR
+          npm install --legacy-peer-deps
+          ng build --configuration production
+          cd -
+
+      # 6) Copy frontend build to backend static folder
+      - name: Copy Frontend to Backend Static
+        run: |
+          rm -rf $BACKEND_DIR/src/main/resources/static
+          mkdir -p $BACKEND_DIR/src/main/resources/static
+          cp -r $FRONTEND_DIR/dist/* $BACKEND_DIR/src/main/resources/static/
+
+      # 7) Package backend jar into zip for Azure
+      - name: Package Backend ZIP
         run: |
           cd $BACKEND_DIR/target
           rm -f app.zip
@@ -71,8 +65,8 @@ jobs:
           ls -l app.zip
           cd -
 
-      # 9) Configure App Settings from GitHub Secrets
-      - name: Configure Azure App Settings
+      # 8) Configure Azure App Settings
+      - name: Configure App Settings
         uses: azure/CLI@v1
         with:
           azcliversion: latest
@@ -87,13 +81,12 @@ jobs:
               SPRING_DATASOURCE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
               FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
               JWT_SECRET="${{ secrets.JWT_SECRET }}" \
-              JWT_EXPIRATION_MS=86400000 \
-              JAVA_VERSION=17
+              JWT_EXPIRATION_MS=86400000
 
-      # 10) Deploy the zip to Azure Web App
+      # 9) Deploy ZIP to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: budget-backend-ahmed
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: $BACKEND_DIR/target/app.zip
+          package: ${{ env.BACKEND_DIR }}/target/app.zip
