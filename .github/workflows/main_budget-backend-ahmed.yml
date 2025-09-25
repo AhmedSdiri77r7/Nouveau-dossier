@@ -1,4 +1,4 @@
-name: Deploy Backend to Azure
+name: Build & Deploy Spring Boot to Azure
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy-backend:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -31,8 +31,8 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-maven-
 
-    # 4️⃣ Build Spring Boot
-    - name: Build Spring Boot
+    # 4️⃣ Build Spring Boot project
+    - name: Build with Maven
       run: mvn clean package -DskipTests
       working-directory: budget-backend-ahmed
 
@@ -40,34 +40,33 @@ jobs:
     - name: Check JAR file
       run: ls -lh budget-backend-ahmed/target
 
-    # 6️⃣ Login Azure via Service Principal
-    - name: Login to Azure
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    # 6️⃣ Copier le frontend (dist Angular) dans static
+    - name: Copy Angular dist to backend
+      run: |
+        cp -r ngx-admin/dist/* budget-backend-ahmed/src/main/resources/static/
 
-    # 7️⃣ Déployer le JAR sur Azure Web App
+    # 7️⃣ Déployer sur Azure App Service via Publish Profile
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v3
       with:
         app-name: budget-backend-ahmed
-        slot-name: production
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         package: budget-backend-ahmed/target/*.jar
 
-    # 8️⃣ Configurer les variables d’environnement dans Azure
-    - name: Configure App Settings
+    # 8️⃣ Configurer les variables d'environnement
+    - name: Configure App Settings (Environment Variables)
       uses: azure/CLI@v1
       with:
         azcliversion: latest
         inlineScript: |
-          az webapp config appsettings set --resource-group budget-rg --name budget-backend-ahmed --settings \
-            SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }} \
-            SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
-            SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
-            SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }} \
-            FILE_UPLOAD_DIR=${{ secrets.FILE_UPLOAD_DIR }} \
-            JWT_SECRET=${{ secrets.JWT_SECRET }} \
-            JWT_EXPIRATION_MS=${{ secrets.JWT_EXPIRATION_MS }} \
-            SPRING_JPA_DATABASE_PLATFORM=${{ secrets.SPRING_JPA_DATABASE_PLATFORM }} \
-            SPRING_JPA_HIBERNATE_DDL_AUTO=${{ secrets.SPRING_JPA_HIBERNATE_DDL_AUTO }} \
-            JAVA_VERSION=${{ secrets.JAVA_VERSION }}
+          az webapp config appsettings set \
+            --resource-group budget-rg \
+            --name budget-backend-ahmed \
+            --settings \
+            SPRING_PROFILES_ACTIVE=prod \
+            SPRING_DATASOURCE_URL=jdbc:postgresql://budgetdb-srv-ahmed.postgres.database.azure.com:5432/budgetdb?sslmode=require \
+            SPRING_DATASOURCE_USERNAME=Ahmed \
+            SPRING_DATASOURCE_PASSWORD=ChangeMe!234 \
+            FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
+            JWT_SECRET=U8K9e2VxL0f6Jq3TbH4YpR7wQ8mN5ZxV1sC6R9bW3tA0dG7H_YQ4J5Z8K1V2L3 \
+            JWT_EXPIRATION_MS=86400000
