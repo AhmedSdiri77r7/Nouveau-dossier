@@ -1,78 +1,80 @@
-name: Build and Deploy Fullstack App to Azure
+name: Build & Deploy Fullstack to Azure
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      BACKEND_DIR: budget-backend-ahmed
+      FRONTEND_DIR: budget-frontend
+
     steps:
-    # 1️⃣ Checkout du code
-    - name: Checkout code
-      uses: actions/checkout@v3
+      # 1) Checkout code
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    # 2️⃣ Setup Node.js (pour Angular)
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+      # 2) Setup Java
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-    # 3️⃣ Build Angular
-    - name: Build Angular
-      run: |
-        cd ngx-admin
-        npm install
-        npm run build --prod
-        cp -r dist/* ../budget-backend-ahmed/src/main/resources/static/
+      # 3) Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
-    # 4️⃣ Setup Java 17
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        distribution: temurin
-        java-version: '17'
+      # 4) Cache Maven dependencies
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
-    # 5️⃣ Cache Maven
-    - name: Cache Maven packages
-      uses: actions/cache@v3
-      with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ runner.os }}-maven-
+      # 5) Build frontend Angular
+      - name: Install frontend dependencies
+        run: |
+          cd $FRONTEND_DIR
+          npm install
 
-    # 6️⃣ Build Spring Boot
-    - name: Build with Maven
-      run: mvn clean package -DskipTests
-      working-directory: budget-backend-ahmed
+      - name: Build frontend Angular
+        run: |
+          cd $FRONTEND_DIR
+          npx ng build --configuration production
 
-    # 7️⃣ Vérifier quel JAR a été généré
-    - name: Check JAR file
-      run: ls -lh budget-backend-ahmed/target
+      # 6) Copy frontend dist to backend static
+      - name: Copy frontend to backend
+        run: |
+          rm -rf $BACKEND_DIR/src/main/resources/static/*
+          cp -r $FRONTEND_DIR/dist/* $BACKEND_DIR/src/main/resources/static/
 
-    # 8️⃣ Deploy to Azure App Service
-    - name: Deploy to Azure Web App
-      uses: azure/webapps-deploy@v2
-      with:
-        app-name: budget-backend-ahmed
-        slot-name: production
-        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        package: budget-backend-ahmed/target/*.jar
+      # 7) Build backend Spring Boot
+      - name: Build backend Maven
+        run: |
+          cd $BACKEND_DIR
+          mvn -B clean package -DskipTests
 
-    # 9️⃣ Configure environment variables
-    - name: Configure App Settings (Environment Variables)
-      uses: azure/CLI@v1
-      with:
-        azcliversion: latest
-        inlineScript: |
-          az webapp config appsettings set --resource-group budget-rg --name budget-backend-ahmed --settings \
-            SPRING_PROFILES_ACTIVE=prod \
-            SPRING_DATASOURCE_URL=jdbc:postgresql://budgetdb-srv-ahmed.postgres.database.azure.com:5432/budgetdb?sslmode=require \
-            SPRING_DATASOURCE_USERNAME=Ahmed \
-            SPRING_DATASOURCE_PASSWORD=ChangeMe!234 \
-            FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
-            JWT_SECRET=U8K9e2VxL0f6Jq3TbH4YpR7wQ8mN5ZxV1sC6R9bW3tA0dG7H_YQ4J5Z8K1V2L3 \
-            JWT_EXPIRATION_MS=86400000
+      # 8) Package backend jar into zip for Azure
+      - name: Package backend ZIP
+        run: |
+          cd $BACKEND_DIR/target
+          rm -f app.zip
+          zip app.zip *.jar
+          cd -
+
+      # 9) Deploy to Azure Web App
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: budget-backend-ahmed
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ${{ BACKEND_DIR }}/target/app.zip
