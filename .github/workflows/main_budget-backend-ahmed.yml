@@ -1,4 +1,4 @@
-name: Build and Deploy Fullstack App to Azure
+name: Deploy Backend Only to Azure
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy-backend:
     runs-on: ubuntu-latest
 
     steps:
@@ -15,29 +15,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # 2️⃣ Setup Node.js pour Angular
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-
-    # 3️⃣ Build Angular et copier dans backend
-    - name: Build Angular
-      run: |
-        cd ngx-admin
-        npm install --legacy-peer-deps
-        npm run build --prod
-        mkdir -p ../budget-backend-ahmed/src/main/resources/static
-        cp -r dist/* ../budget-backend-ahmed/src/main/resources/static/
-
-    # 4️⃣ Setup Java 17
+    # 2️⃣ Setup Java 17
     - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
         distribution: temurin
         java-version: '17'
 
-    # 5️⃣ Cache Maven
+    # 3️⃣ Cache Maven
     - name: Cache Maven packages
       uses: actions/cache@v3
       with:
@@ -46,22 +31,22 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-maven-
 
-    # 6️⃣ Build Spring Boot
+    # 4️⃣ Build Spring Boot
     - name: Build Spring Boot
       run: mvn clean package -DskipTests
       working-directory: budget-backend-ahmed
 
-    # 7️⃣ Vérifier le JAR généré
+    # 5️⃣ Vérifier le JAR généré
     - name: Check JAR file
       run: ls -lh budget-backend-ahmed/target
 
-    # 8️⃣ Login Azure
+    # 6️⃣ Login Azure
     - name: Login to Azure
       uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    # 9️⃣ Déployer le JAR sur Azure Web App
+    # 7️⃣ Déployer le JAR sur Azure Web App
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v3
       with:
@@ -70,7 +55,7 @@ jobs:
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         package: budget-backend-ahmed/target/*.jar
 
-    # 🔟 Configurer les variables d’environnement dans Azure
+    # 8️⃣ Configurer les variables d’environnement dans Azure
     - name: Configure App Settings (Environment Variables)
       uses: azure/CLI@v1
       with:
