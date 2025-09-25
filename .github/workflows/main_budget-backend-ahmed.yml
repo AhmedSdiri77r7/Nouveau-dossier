@@ -1,4 +1,4 @@
-name: Build & Deploy Spring Boot to Azure
+name: Build & Deploy Fullstack to Azure
 
 on:
   push:
@@ -15,14 +15,29 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # 2️⃣ Setup Java 17
-    - name: Set up JDK 17
+    # 2️⃣ Setup Node.js (Angular)
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    # 3️⃣ Build Angular
+    - name: Build Angular
+      run: |
+        cd ngx-admin
+        npm install
+        npm run build -- --configuration production
+        # Copier le build Angular dans le dossier static du backend
+        cp -r dist/ngx-admin/* ../budget-backend-ahmed/src/main/resources/static/
+
+    # 4️⃣ Setup Java 17
+    - name: Setup Java 17
       uses: actions/setup-java@v3
       with:
         distribution: temurin
         java-version: '17'
 
-    # 3️⃣ Cache Maven
+    # 5️⃣ Cache Maven
     - name: Cache Maven packages
       uses: actions/cache@v3
       with:
@@ -31,30 +46,26 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-maven-
 
-    # 4️⃣ Build Spring Boot project
-    - name: Build with Maven
+    # 6️⃣ Build Spring Boot
+    - name: Build Spring Boot
       run: mvn clean package -DskipTests
       working-directory: budget-backend-ahmed
 
-    # 5️⃣ Vérifier le JAR généré
-    - name: Check JAR file
+    # 7️⃣ Vérifier le JAR généré
+    - name: List JAR
       run: ls -lh budget-backend-ahmed/target
 
-    # 6️⃣ Copier le frontend (dist Angular) dans static
-    - name: Copy Angular dist to backend
-      run: |
-        cp -r ngx-admin/dist/* budget-backend-ahmed/src/main/resources/static/
-
-    # 7️⃣ Déployer sur Azure App Service via Publish Profile
+    # 8️⃣ Deploy to Azure Web App
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v3
       with:
         app-name: budget-backend-ahmed
+        slot-name: production
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         package: budget-backend-ahmed/target/*.jar
 
-    # 8️⃣ Configurer les variables d'environnement
-    - name: Configure App Settings (Environment Variables)
+    # 9️⃣ Configurer les variables d'environnement
+    - name: Configure App Settings
       uses: azure/CLI@v1
       with:
         azcliversion: latest
@@ -63,10 +74,10 @@ jobs:
             --resource-group budget-rg \
             --name budget-backend-ahmed \
             --settings \
-            SPRING_PROFILES_ACTIVE=prod \
-            SPRING_DATASOURCE_URL=jdbc:postgresql://budgetdb-srv-ahmed.postgres.database.azure.com:5432/budgetdb?sslmode=require \
-            SPRING_DATASOURCE_USERNAME=Ahmed \
-            SPRING_DATASOURCE_PASSWORD=ChangeMe!234 \
-            FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
-            JWT_SECRET=U8K9e2VxL0f6Jq3TbH4YpR7wQ8mN5ZxV1sC6R9bW3tA0dG7H_YQ4J5Z8K1V2L3 \
-            JWT_EXPIRATION_MS=86400000
+              SPRING_PROFILES_ACTIVE=prod \
+              SPRING_DATASOURCE_URL="${{ secrets.DB_URL }}" \
+              SPRING_DATASOURCE_USERNAME="${{ secrets.DB_USER }}" \
+              SPRING_DATASOURCE_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+              FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
+              JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              JWT_EXPIRATION_MS=86400000
