@@ -11,7 +11,7 @@ jobs:
 
     env:
       BACKEND_DIR: budget-backend-ahmed
-      FRONTEND_DIR: budget-frontend   # <-- mets ici le dossier de ton projet Angular
+      FRONTEND_DIR: ngx-admin 
 
     steps:
       # 1) Checkout code
