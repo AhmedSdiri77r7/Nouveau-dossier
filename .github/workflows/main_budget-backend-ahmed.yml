@@ -30,7 +30,7 @@ jobs:
         npm install -g @angular/cli@12
         export NODE_OPTIONS=--openssl-legacy-provider
         ng build --configuration production
-        cp -r dist/* ../budget-backend-ahmed/src/main/resources/static/
+        cp -r dist/ngx-admin/* ../budget-backend-ahmed/src/main/resources/static/
 
     # 4️⃣ Setup Java 17
     - name: Set up JDK 17
